@@ -1,0 +1,8 @@
+{
+  "zip": "data/images.zip",
+  "image_files": 105100,
+  "unique_article_ids_with_images": 105100,
+  "total_uncompressed_gb": 28.458,
+  "avg_uncompressed_kb": 283.93,
+  "index_csv": "data/index/images_index.csv"
+}

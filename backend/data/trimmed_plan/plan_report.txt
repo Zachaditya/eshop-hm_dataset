@@ -1,0 +1,10 @@
+Target N: 4000
+Seed: 42
+Quota weights: {'Ladieswear': 0.4, 'Menswear': 0.4, 'Sport': 0.1, 'Divided': 0.1}
+Quotas used: {'Ladieswear': 1600, 'Menswear': 1600, 'Sport': 400, 'Divided': 400}
+Achieved counts: {'Ladieswear': 1600, 'Menswear': 1600, 'Sport': 400, 'Divided': 400}
+Estimated extracted size (GB): 1.003
+Outputs:
+ - data/trimmed_plan/selected_article_ids.txt
+ - data/trimmed_plan/selected_members.txt
+ - data/trimmed_plan/catalog_trimmed.csv
