@@ -4,6 +4,7 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import CartProvider from "@/components/CartProvider";
 import AuthProvider from "@/components/AuthProvider";
+import AgentChat from "@/components/AgentChat";
 
 export const metadata: Metadata = {
   title: "Ecom",
@@ -27,6 +28,7 @@ export default function RootLayout({
             </div>
           </CartProvider>
         </AuthProvider>
+        <AgentChat />
       </body>
     </html>
   );

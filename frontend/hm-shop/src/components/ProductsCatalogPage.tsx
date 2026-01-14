@@ -99,10 +99,10 @@ export default function ProductsCatalogPage({
               },
 
               // faster fade
-              opacity: { duration: 0.22 },
+              opacity: { duration: 0.01 },
 
               // faster blur clear
-              filter: { duration: 0.32, ease: "easeOut" as const, delay: 0.0 },
+              filter: { duration: 0.01, ease: "easeOut" as const, delay: 0.0 },
             },
       };
     },

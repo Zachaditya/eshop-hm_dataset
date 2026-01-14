@@ -5,9 +5,6 @@ export type Product = {
     image_url: string;
     product_group_name?: string;
     description?: string;
-    category?: string;
-    tags?: string[];
-    inStock?: boolean;
   };
   
   export type Event = {
