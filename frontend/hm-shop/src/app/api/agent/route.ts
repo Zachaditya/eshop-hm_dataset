@@ -5,6 +5,10 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const META_MARKER = "\n\n<<HM_SHOP_PRODUCTS>>";
+//Only True Locally
+const CHATBOT_ENABLED = process.env.NEXT_PUBLIC_CHATBOT_ENABLED === "true";
+
+
 
 type ChatMessage = {
   role: "system" | "user" | "assistant";
@@ -228,6 +232,11 @@ export async function POST(req: NextRequest) {
     body = await req.json();
   } catch {
     return new Response("Invalid JSON body", { status: 400 });
+  }
+
+  if (!CHATBOT_ENABLED) {
+    return new Response("This chatbot demo is only available when running the project locally. If you’d like to see a live demo, email zachaditya@berkeley.edu to schedule a demo", 
+    { status: 403 });
   }
 
   const incoming: ChatMessage[] = Array.isArray(body?.messages) ? body.messages : [];

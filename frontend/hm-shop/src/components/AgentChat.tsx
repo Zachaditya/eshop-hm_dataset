@@ -2,12 +2,11 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { MessageCircle } from "lucide-react";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 
 const META_MARKER = "\n\n<<HM_SHOP_PRODUCTS>>";
-
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 
 type Role = "user" | "assistant" | "system";
 type Msg = { role: Role; content: string };
@@ -60,16 +59,13 @@ async function readAgentStream(
 
       const idx = pending.indexOf(marker);
       if (idx >= 0) {
-        // emit everything before marker
         const textPart = pending.slice(0, idx);
         if (textPart) onText(textPart);
 
-        // switch to meta mode
         inMeta = true;
         metaBuf += pending.slice(idx + marker.length);
         pending = "";
       } else {
-        // emit "safe" portion while keeping enough tail to detect marker split
         const keep = marker.length;
         if (pending.length > keep) {
           const emit = pending.slice(0, pending.length - keep);
@@ -82,9 +78,7 @@ async function readAgentStream(
     }
   }
 
-  // flush any remaining text if we never saw marker
   if (!inMeta && pending) onText(pending);
-
   if (!inMeta) return { items: [] };
 
   try {
@@ -96,6 +90,10 @@ async function readAgentStream(
 }
 
 export default function AgentChat() {
+  const router = useRouter();
+
+  const CHATBOT_ENABLED = process.env.NEXT_PUBLIC_CHATBOT_ENABLED === "true";
+
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Msg[]>([
     {
@@ -115,10 +113,8 @@ export default function AgentChat() {
     []
   );
   const sp = useSearchParams();
-
   const reduceMotion = useReducedMotion();
 
-  // Auto-scroll on new tokens/messages
   useEffect(() => {
     if (!open) return;
     listRef.current?.scrollTo({
@@ -138,9 +134,8 @@ export default function AgentChat() {
 
     setInput("");
     setBusy(true);
-    setRecommended([]); // clear old cards
+    setRecommended([]);
 
-    // build history BEFORE mutating state
     const history: Msg[] = messages
       .filter((m) => m.role !== "system")
       .map((m) => ({ role: m.role, content: m.content })) as Msg[];
@@ -216,7 +211,6 @@ export default function AgentChat() {
   }
 
   function close() {
-    // abort streaming if closing mid-response
     abortRef.current?.abort();
     abortRef.current = null;
     setBusy(false);
@@ -225,11 +219,12 @@ export default function AgentChat() {
 
   return (
     <>
-      {/* Closed state: button */}
       {!open ? (
         <div className="fixed bottom-5 right-5 z-50">
           <button
-            onClick={() => setOpen(true)}
+            onClick={() =>
+              CHATBOT_ENABLED ? router.push("/chatbot") : setOpen(true)
+            }
             className="rounded-full border border-neutral-200 bg-white p-3 text-neutral-900 shadow-lg hover:bg-neutral-50"
             aria-label="Open chat"
             title="Chat"
@@ -239,7 +234,6 @@ export default function AgentChat() {
         </div>
       ) : null}
 
-      {/* Open state: animated overlay + panel (same pattern as CartDrawer) */}
       <AnimatePresence>
         {open ? (
           <motion.div
@@ -248,7 +242,6 @@ export default function AgentChat() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
           >
-            {/* backdrop */}
             <motion.button
               aria-label="Close chat"
               className="absolute inset-0 bg-black/40"
@@ -264,7 +257,6 @@ export default function AgentChat() {
               }}
             />
 
-            {/* panel (RIGHT) */}
             <motion.div
               className="absolute bottom-5 right-5 w-[360px] overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-2xl"
               initial={reduceMotion ? { x: 0 } : { x: "100%" }}
@@ -290,8 +282,6 @@ export default function AgentChat() {
                     }
               }
             >
-              {/* --- keep your existing chat panel UI below --- */}
-
               <div className="flex items-center justify-between border-b border-neutral-200 px-4 py-3">
                 <div className="text-sm font-semibold text-neutral-900">
                   HM Assistant
@@ -332,7 +322,6 @@ export default function AgentChat() {
                   </div>
                 ))}
 
-                {/* Your existing recommended block stays here unchanged */}
                 {recommended.length > 0 ? (
                   <div className="mr-auto w-full rounded-2xl border border-neutral-200 bg-white p-3">
                     <div className="mb-2 text-xs font-semibold text-neutral-700">
@@ -392,8 +381,6 @@ export default function AgentChat() {
                   </button>
                 </div>
               </div>
-
-              {/* --- end chat panel --- */}
             </motion.div>
           </motion.div>
         ) : null}
