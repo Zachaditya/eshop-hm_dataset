@@ -5,3 +5,4 @@ SQLAlchemy
 alembic
 psycopg[binary]
 numpy>=1.26,<3
+faiss-cpu==1.13.2
