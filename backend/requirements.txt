@@ -4,3 +4,4 @@ python-dotenv
 SQLAlchemy
 alembic
 psycopg[binary]
+numpy>=1.26,<3
