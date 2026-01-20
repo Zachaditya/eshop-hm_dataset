@@ -12,7 +12,14 @@ import random
 
 from collections import Counter
 
-from app.search import semantic_search_ids, parse_query_intent, apply_fuzzy_boosts
+try:
+    from app.search import semantic_search_ids, parse_query_intent, apply_fuzzy_boosts
+    SEMANTIC_ENABLED = True
+except Exception:
+    SEMANTIC_ENABLED = False
+    semantic_search_ids = None
+    parse_query_intent = None
+    apply_fuzzy_boosts = None
 
 import secrets
 
@@ -247,6 +254,9 @@ def homepage_products(
 
     return {"items": items, "total": len(pool), "limit": limit, "group": group, "mode": mode}
 
+
+if not SEMANTIC_ENABLED:
+    raise HTTPException(status_code=501, detail="Semantic search disabled in this deployment.")
 
 @app.get("/products/semantic")
 def semantic_products(
