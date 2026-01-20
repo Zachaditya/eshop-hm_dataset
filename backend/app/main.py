@@ -134,7 +134,7 @@ def load_products():
                 "id": str(article_id),
                 "name": name,
                 "price": price,
-                "image_url": build_image_path(article_id),
+                "image_url": build_image_key(article_id),
                 "product_group_name": group_name,
                 "description": desc,
                 "color_name": color_name,
