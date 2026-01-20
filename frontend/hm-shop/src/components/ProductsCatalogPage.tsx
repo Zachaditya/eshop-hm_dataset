@@ -246,52 +246,57 @@ export default function ProductsCatalogPage({
       ) : null}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {items.map((p, idx) => (
-          <motion.div
-            key={String(p.id)}
-            variants={cardVariants}
-            initial="hidden"
-            whileInView="show"
-            viewport={{ once: true, amount: 0.2 }}
-            custom={idx}
-            whileHover={
-              reduceMotion ? undefined : ({ y: -3, scale: 1.01 } as const)
-            }
-            transition={
-              reduceMotion
-                ? undefined
-                : ({
-                    type: "spring" as const,
-                    stiffness: 200,
-                    damping: 28,
-                    mass: 1.0,
-                  } as const)
-            }
-            className="group will-change-transform"
-          >
-            <Link
-              href={`/products/${p.id}`}
-              className="block rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm transition-shadow hover:shadow-md"
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={`${API_BASE}${p.image_url}`}
-                alt={p.name}
-                className="aspect-[4/5] w-full rounded-xl bg-neutral-100 object-cover"
-                loading="lazy"
-              />
+        {items.map((p, idx) => {
+          const imgSrc = p.image_url?.startsWith("http")
+            ? p.image_url
+            : `${API_BASE}${p.image_url}`;
 
-              <div className="mt-4">
-                <div className="truncate text-sm font-medium text-neutral-900">
-                  {p.name}
+          return (
+            <motion.div
+              key={String(p.id)}
+              variants={cardVariants}
+              initial="hidden"
+              whileInView="show"
+              viewport={{ once: true, amount: 0.2 }}
+              custom={idx}
+              whileHover={
+                reduceMotion ? undefined : ({ y: -3, scale: 1.01 } as const)
+              }
+              transition={
+                reduceMotion
+                  ? undefined
+                  : ({
+                      type: "spring" as const,
+                      stiffness: 200,
+                      damping: 28,
+                      mass: 1.0,
+                    } as const)
+              }
+              className="group will-change-transform"
+            >
+              <Link
+                href={`/products/${p.id}`}
+                className="block rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm transition-shadow hover:shadow-md"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={imgSrc}
+                  alt={p.name}
+                  className="aspect-[4/5] w-full rounded-xl bg-neutral-100 object-cover"
+                  loading="lazy"
+                />
+                <div className="mt-4">
+                  <div className="truncate text-sm font-medium text-neutral-900">
+                    {p.name}
+                  </div>
+                  <div className="mt-1 text-sm text-neutral-600">
+                    {formatUSD(p.price)}
+                  </div>
                 </div>
-                <div className="mt-1 text-sm text-neutral-600">
-                  {formatUSD(p.price)}
-                </div>
-              </div>
-            </Link>
-          </motion.div>
-        ))}
+              </Link>
+            </motion.div>
+          );
+        })}
       </div>
 
       <div ref={sentinelRef} className="h-12" />

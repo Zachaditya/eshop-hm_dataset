@@ -116,7 +116,28 @@ export default function CheckoutPage() {
 
             const pid = String(it.product?.id ?? it.product_id);
             const aid = pid.padStart(10, "0");
-            const imgsrc = `${API_BASE}/images/${aid.slice(0, 3)}/${aid}.jpg`;
+
+            // Local dev fallback (served by FastAPI static mount)
+            const fallbackLocal = `${API_BASE}/images/${aid.slice(
+              0,
+              3
+            )}/${aid}.jpg`;
+
+            // Public R2 base (set in frontend env as NEXT_PUBLIC_IMAGE_BASE_URL)
+            const IMAGE_BASE = (
+              process.env.NEXT_PUBLIC_IMAGE_BASE_URL ?? ""
+            ).replace(/\/$/, "");
+
+            // Prefer image_key from API; otherwise derive deterministically from id
+            const imageKey =
+              it.product?.image_key &&
+              String(it.product.image_key).trim() !== ""
+                ? String(it.product.image_key).replace(/^\/+/, "")
+                : `images_data/${aid.slice(0, 3)}/${aid}.jpg`;
+
+            const imgSrc = IMAGE_BASE
+              ? `${IMAGE_BASE}/${imageKey}`
+              : fallbackLocal;
 
             const line =
               it.line_total_cents ??
@@ -126,7 +147,7 @@ export default function CheckoutPage() {
               <div key={it.id} className="flex items-start gap-4 px-5 py-4">
                 <div className="h-16 w-16 flex-shrink-0 overflow-hidden rounded-xl bg-neutral-100">
                   <img
-                    src={imgsrc}
+                    src={imgSrc}
                     alt={name}
                     className="h-full w-full object-cover"
                     loading="lazy"

@@ -1,11 +1,12 @@
 export type Product = {
-    id: number;
-    name: string;
-    price: number;
-    image_url: string;
-    product_group_name?: string;
-    description?: string;
-  };
+  id: string | number;
+  name: string;
+  price: number;
+  image_url?: string | null;
+  image_key?: string | null;
+  product_group_name?: string;
+  description?: string;
+};
   
   export type Event = {
     id: string | number;

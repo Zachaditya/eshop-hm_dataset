@@ -21,6 +21,7 @@ from app.api.cart import router as cart_router
 from app.auth import router as auth_router
 
 from app.api.orders import router as orders_router
+import os
 
 app = FastAPI(title="HM Shop Backend", version="0.1.0")
 
@@ -42,7 +43,10 @@ HERE = Path(__file__).resolve().parent
 PROJECT_ROOT = HERE if (HERE / "data").exists() else HERE.parent
 
 CSV_PATH = PROJECT_ROOT / "data" / "catalog_trimmed_priced.csv"
+IMAGE_BASE_URL = (os.getenv("IMAGE_BASE_URL") or "").rstrip("/")
+
 IMG_ROOT = PROJECT_ROOT / "data" / "images"
+
 
 # Serve images at /images/...
 app.mount("/images", StaticFiles(directory=str(IMG_ROOT)), name="images")
@@ -70,7 +74,20 @@ def to_price(v: str) -> float:
 PRODUCTS: list[dict] = []
 INDEX: dict[str, dict] = {}
 
-def build_image_path(article_id: str) -> str:
+if IMG_ROOT.exists():
+    app.mount("/images", StaticFiles(directory=str(IMG_ROOT)), name="images")
+
+
+def build_image_key(article_id: str) -> str:
+    aid = str(article_id).strip().zfill(10)
+    # Matches your R2 layout: images_data/011/0110065002.jpg
+    return f"images_data/{aid[:3]}/{aid}.jpg"
+
+def build_image_url(article_id: str) -> str:
+    key = build_image_key(article_id)
+    if IMAGE_BASE_URL:
+        return f"{IMAGE_BASE_URL}/{key}"
+    # Local fallback (dev only)
     aid = str(article_id).strip().zfill(10)
     return f"/images/{aid[:3]}/{aid}.jpg"
 
