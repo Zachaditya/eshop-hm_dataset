@@ -1,10 +1,6 @@
 import ProductsCatalogPage from "@/components/ProductsCatalogPage";
 
-export default function MenFootwearPage({
-  searchParams,
-}: {
-  searchParams?: { group?: string; q?: string };
-}) {
+export default function MenFootwearPage() {
   return (
     <ProductsCatalogPage
       mode="men"
