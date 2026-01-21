@@ -5,6 +5,7 @@ import Footer from "@/components/Footer";
 import CartProvider from "@/components/CartProvider";
 import AuthProvider from "@/components/AuthProvider";
 import AgentChat from "@/components/AgentChat";
+import { Suspense } from "react";
 
 export const metadata: Metadata = {
   title: "Ecom",
@@ -22,7 +23,10 @@ export default function RootLayout({
         <AuthProvider>
           <CartProvider>
             <div className="flex min-h-screen flex-col">
-              <Navbar />
+              <Suspense>
+                <Navbar />
+              </Suspense>
+
               <main className="flex-1">{children}</main>
               <Footer />
             </div>
