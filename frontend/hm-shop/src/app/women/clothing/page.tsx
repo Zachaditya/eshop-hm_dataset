@@ -18,7 +18,6 @@ export default function WomenClothingPage({
         "Swimwear",
         "Nightwear",
       ]}
-      searchParams={searchParams}
     />
   );
 }

@@ -10,7 +10,6 @@ export default function WomenLifestylePage({
       mode="women"
       title="Lifestyle"
       groups={["Items", "Furniture", "Stationery", "Garment and Shoe care"]}
-      searchParams={searchParams}
     />
   );
 }

@@ -10,7 +10,6 @@ export default function WomenAccessoriesPage({
       mode="women"
       title="Accessories"
       groups={["Accessories", "Bags"]}
-      searchParams={searchParams}
     />
   );
 }

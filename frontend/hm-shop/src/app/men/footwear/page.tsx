@@ -10,7 +10,6 @@ export default function MenFootwearPage({
       mode="men"
       title="Footwear"
       groups={["Shoes", "Socks & Tights"]}
-      searchParams={searchParams}
     />
   );
 }

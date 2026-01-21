@@ -17,7 +17,6 @@ export default function MenClothingPage({
         "Swimwear",
         "Nightwear",
       ]}
-      searchParams={searchParams}
     />
   );
 }
