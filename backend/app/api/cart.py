@@ -75,13 +75,17 @@ def get_cart(
     )
 
     # Always set cookie to whatever cart you're actually using
+    proto = (req.headers.get("x-forwarded-proto") or req.url.scheme).lower()
+    is_https = proto == "https"
+
     response.set_cookie(
         key=CART_COOKIE,
         value=cart.id,
         max_age=COOKIE_MAX_AGE,
         httponly=True,
-        samesite="lax",
-        secure=False,
+        samesite="none" if is_https else "lax",
+        secure=is_https,
+        path ="/",
     )
 
     return cart_summary(db, cart)
@@ -100,15 +104,19 @@ def add_cart_item(
         user_id=(user.id if user else None),
         cart_id=cart_id,
     )
+    proto = (req.headers.get("x-forwarded-proto") or req.url.scheme).lower()
+    is_https = proto == "https"
 
     response.set_cookie(
         key=CART_COOKIE,
         value=cart.id,
         max_age=COOKIE_MAX_AGE,
         httponly=True,
-        samesite="lax",
-        secure=False,
+        samesite="none" if is_https else "lax",
+        secure=is_https,
+        path ="/",
     )
+
 
     try:
         cart = add_item(db, cart.id, body.product_id, body.quantity)
@@ -138,14 +146,19 @@ def update_item_quantity(
         cart_id=cart_id,
     )    
     if created:
+        proto = (req.headers.get("x-forwarded-proto") or req.url.scheme).lower()
+        is_https = proto == "https"
+
         response.set_cookie(
             key=CART_COOKIE,
             value=cart.id,
             max_age=COOKIE_MAX_AGE,
             httponly=True,
-            samesite="lax",
-            secure=False,
+            samesite="none" if is_https else "lax",
+            secure=is_https,
+            path ="/",
         )
+
 
     try:
         cart = set_item_quantity(db, cart.id, item_id, body.quantity)
@@ -236,13 +249,17 @@ def checkout_current_cart(
         raise HTTPException(status_code=400, detail=msg)
 
     # Switch cookie to the fresh active cart
+    proto = (req.headers.get("x-forwarded-proto") or req.url.scheme).lower()
+    is_https = proto == "https"
+
     response.set_cookie(
         key=CART_COOKIE,
-        value=new_cart.id,
+        value=cart.id,
         max_age=COOKIE_MAX_AGE,
         httponly=True,
-        samesite="lax",
-        secure=False,
+        samesite="none" if is_https else "lax",
+        secure=is_https,
+        path ="/",
     )
 
     order = cart_summary(db, order_cart)
