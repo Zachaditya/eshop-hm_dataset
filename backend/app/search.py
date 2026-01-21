@@ -37,7 +37,7 @@ def load_search_assets(model_name: str = "sentence-transformers/all-MiniLM-L6-v2
             f"Semantic index not found. Run build script first.\nMissing: {index_path} or {idmap_path}"
         )
 
-    _MODEL = SentenceTransformer(model_name)
+    _MODEL = SentenceTransformer(model_name, backend="onnx")
     _INDEX = faiss.read_index(str(index_path))
     _IDMAP = json.loads(idmap_path.read_text(encoding="utf-8"))
 
