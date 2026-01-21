@@ -23,7 +23,7 @@ export default function RootLayout({
         <AuthProvider>
           <CartProvider>
             <div className="flex min-h-screen flex-col">
-              <Suspense>
+              <Suspense fallback={<div className="h-16" />}>
                 <Navbar />
               </Suspense>
 
@@ -32,7 +32,9 @@ export default function RootLayout({
             </div>
           </CartProvider>
         </AuthProvider>
-        <AgentChat />
+        <Suspense>
+          <AgentChat />
+        </Suspense>
       </body>
     </html>
   );
