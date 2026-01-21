@@ -15,12 +15,14 @@ from fastapi.staticfiles import StaticFiles
 
 
 SEMANTIC_ENABLED = False
+SEMANTIC_ERR = None
+
 try:
     from app.search import semantic_search_ids, parse_query_intent, apply_fuzzy_boosts
     SEMANTIC_ENABLED = True
-except Exception:
+except Exception as e:
+    SEMANTIC_ERR = str(e)
     SEMANTIC_ENABLED = False
-
 
 import secrets
 
@@ -265,6 +267,8 @@ def semantic_products(
     index_group_name: list[str] = Query(default=[]),
     product_group_name: list[str] = Query(default=[]),
 ):
+    if not SEMANTIC_ENABLED:
+        raise HTTPException(status_code=503, detail=f"Semantic search disabled: {SEMANTIC_ERR}")
     # 1) vector retrieval
     hits = semantic_search_ids(q, top_k=300)
 
