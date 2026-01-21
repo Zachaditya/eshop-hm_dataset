@@ -139,10 +139,32 @@ export default function ProductCatalog({
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src={`${apiBase}${p.image_url}`}
+                src={(() => {
+                  const base = (apiBase ?? "").replace(/\/$/, "");
+                  const raw = (p.image_url ?? "").trim();
+
+                  if (!raw) return "/placeholder.png";
+
+                  if (/^https?:\/\//i.test(raw)) return raw;
+
+                  const path = raw.replace(/^\/+/, "");
+
+                  const finalPath = path.startsWith("images_data/")
+                    ? `images/${path.slice("images_data/".length)}`
+                    : path;
+
+                  return `${base}/${finalPath}`;
+                })()}
                 alt={p.name}
                 className="aspect-[4/5] w-full rounded-xl bg-neutral-100 object-cover"
                 loading="lazy"
+                onError={(e) => {
+                  const img = e.currentTarget as HTMLImageElement;
+                  if (img.dataset.fallback !== "1") {
+                    img.dataset.fallback = "1";
+                    img.src = "/placeholder.png"; // put placeholder.png in /public
+                  }
+                }}
               />
               <div className="mt-4">
                 <div className="truncate text-sm font-medium text-neutral-900">

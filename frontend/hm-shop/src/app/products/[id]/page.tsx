@@ -19,7 +19,9 @@ export default async function ProductDetailPage({
 }) {
   const { id } = await params;
 
-  const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
+  const API_BASE = (
+    process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000"
+  ).replace(/\/$/, "");
 
   let product;
   try {
@@ -31,7 +33,14 @@ export default async function ProductDetailPage({
   }
   const { items: similar } = await getSimilarProducts(id, { limit: 8 });
 
-  const imgSrc = `${API_BASE}${product.image_url}`;
+  const rel =
+    typeof product.image_url === "string"
+      ? product.image_url.replace(/^\/?images_data\//, "") // remove images_data/
+      : "";
+
+  const imgSrc = rel
+    ? new URL(`/images/${rel}`, API_BASE).toString()
+    : "/placeholder.png";
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-10">
@@ -106,11 +115,30 @@ export default async function ProductDetailPage({
               className="group rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
             >
               <img
-                src={`${API_BASE}${p.image_url}`}
+                src={(() => {
+                  const raw =
+                    typeof p.image_url === "string" ? p.image_url.trim() : "";
+                  if (!raw) return "/placeholder.png";
+
+                  // already absolute URL
+                  if (/^https?:\/\//i.test(raw)) return raw;
+
+                  const path = raw.replace(/^\/+/, ""); // remove leading slashes
+
+                  // If dataset-style: images_data/xxx.jpg -> serve via FastAPI mount at /images/xxx.jpg
+                  const rel = path.startsWith("images_data/")
+                    ? path.slice("images_data/".length)
+                    : path.startsWith("images/")
+                    ? path.slice("images/".length)
+                    : path;
+
+                  return new URL(`/images/${rel}`, API_BASE).toString();
+                })()}
                 alt={p.name}
                 className="aspect-[4/5] w-full rounded-xl bg-neutral-100 object-cover"
                 loading="lazy"
               />
+
               <div className="mt-3">
                 <div className="truncate text-sm font-medium">{p.name}</div>
                 <div className="mt-1 text-sm text-muted">

@@ -128,7 +128,6 @@ export default function CheckoutPage() {
               process.env.NEXT_PUBLIC_IMAGE_BASE_URL ?? ""
             ).replace(/\/$/, "");
 
-            // Prefer image_key from API; otherwise derive deterministically from id
             const imageKey =
               it.product?.image_key &&
               String(it.product.image_key).trim() !== ""

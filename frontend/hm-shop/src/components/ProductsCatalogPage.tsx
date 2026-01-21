@@ -246,14 +246,15 @@ export default function ProductsCatalogPage({
       ) : null}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {items.map((p, idx) => {
-          const imgSrc = p.image_url?.startsWith("http")
-            ? p.image_url
-            : `${API_BASE}${p.image_url}`;
+        {items.map((product, idx) => {
+          const rel =
+            typeof product.image_url === "string"
+              ? product.image_url.replace(/^\/?images_data\//, "") // remove images_data/
+              : "";
 
           return (
             <motion.div
-              key={String(p.id)}
+              key={String(product.id)}
               variants={cardVariants}
               initial="hidden"
               whileInView="show"
@@ -275,22 +276,39 @@ export default function ProductsCatalogPage({
               className="group will-change-transform"
             >
               <Link
-                href={`/products/${p.id}`}
+                href={`/products/${product.id}`}
                 className="block rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm transition-shadow hover:shadow-md"
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={imgSrc}
-                  alt={p.name}
+                  src={(() => {
+                    const rel =
+                      typeof product.image_url === "string"
+                        ? product.image_url.replace(/^\/?images_data\//, "") // strip images_data/
+                        : "";
+
+                    return rel
+                      ? new URL(`/images/${rel}`, API_BASE).toString()
+                      : "/placeholder.png";
+                  })()}
+                  alt={product.name}
                   className="aspect-[4/5] w-full rounded-xl bg-neutral-100 object-cover"
                   loading="lazy"
+                  onError={(e) => {
+                    const img = e.currentTarget as HTMLImageElement;
+                    if (img.dataset.fallback !== "1") {
+                      img.dataset.fallback = "1";
+                      img.src = "/placeholder.png";
+                    }
+                  }}
                 />
+
                 <div className="mt-4">
                   <div className="truncate text-sm font-medium text-neutral-900">
-                    {p.name}
+                    {product.name}
                   </div>
                   <div className="mt-1 text-sm text-neutral-600">
-                    {formatUSD(p.price)}
+                    {formatUSD(product.price)}
                   </div>
                 </div>
               </Link>

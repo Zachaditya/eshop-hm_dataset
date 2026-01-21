@@ -11,6 +11,8 @@ import csv
 import random
 
 from collections import Counter
+from fastapi.staticfiles import StaticFiles
+
 
 SEMANTIC_ENABLED = False
 try:
