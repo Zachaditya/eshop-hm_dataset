@@ -1,0 +1,4 @@
+backend/
+**/*.csv
+**/.venv/
+**/__pycache__/
