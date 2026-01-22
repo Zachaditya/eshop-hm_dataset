@@ -6,12 +6,16 @@ from app.api.v1.products import router as products_router
 from app.api.v1.events import router as events_router
 
 from pathlib import Path
-import csv
 
 import random
 
 from collections import Counter
-from fastapi.staticfiles import StaticFiles
+
+
+
+from app.db.models import Product
+from sqlalchemy import select
+from app.core.db import SessionLocal
 
 
 SEMANTIC_ENABLED = False
@@ -39,9 +43,12 @@ app.include_router(cart_router)
 app.include_router(auth_router)
 
 
+ALLOW_ORIGINS = (os.getenv("ALLOW_ORIGINS") or "").split(",")
+
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", "https://eshop-hm-dataset.vercel.app"],
+    allow_origins=[o.strip() for o in ALLOW_ORIGINS if o.strip()] or ["http://localhost:3000", "http://127.0.0.1:3000", "https://eshop-hm-dataset.vercel.app"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -52,7 +59,6 @@ HERE = Path(__file__).resolve().parent
 
 PROJECT_ROOT = HERE if (HERE / "data").exists() else HERE.parent
 
-CSV_PATH = PROJECT_ROOT / "data" / "catalog_trimmed_priced.csv"
 IMAGE_BASE_URL = (os.getenv("IMAGE_BASE_URL") or "").rstrip("/")
 
 IMG_ROOT = PROJECT_ROOT / "data" / "images"
@@ -68,25 +74,9 @@ app.include_router(events_router, prefix="/v1")
 app.include_router(orders_router)
 
 
-def pick(row: dict, keys: list[str], default: str = "") -> str:
-    for k in keys:
-        v = row.get(k)
-        if v is not None and str(v).strip() != "":
-            return str(v).strip()
-    return default
-
-def to_price(v: str) -> float:
-    try:
-        cents = int(float(str(v).strip()))
-        return cents / 100.0
-    except Exception:
-        return 0.0
-
 PRODUCTS: list[dict] = []
 INDEX: dict[str, dict] = {}
 
-if IMG_ROOT.exists():
-    app.mount("/images", StaticFiles(directory=str(IMG_ROOT)), name="images")
 
 
 def build_image_key(article_id: str) -> str:
@@ -102,56 +92,106 @@ def build_image_url(article_id: str) -> str:
     aid = str(article_id).strip().zfill(10)
     return f"/images/{aid[:3]}/{aid}.jpg"
 
+def _coalesce(*vals, default=""):
+    for v in vals:
+        if v is None:
+            continue
+        s = str(v).strip()
+        if s != "":
+            return s
+    return default
+
+def _maybe_full_image_url(image_val: str, product_id: str) -> str:
+    """
+    DB stores:
+      - a full https URL (already good)
+      - a key like 'images_data/011/0110065002.jpg'
+      - empty/null -> compute from article_id
+    """
+    v = (image_val or "").strip()
+    if v.startswith("http://") or v.startswith("https://"):
+        return v
+
+    # If DB stored a key, attach IMAGE_BASE_URL.
+    if v:
+        return f"{IMAGE_BASE_URL}/{v.lstrip('/')}" if IMAGE_BASE_URL else v
+
+    # If DB has nothing, compute from article_id/id
+    return build_image_url(product_id)
+
 def load_products():
     global PRODUCTS, INDEX
-    if not CSV_PATH.exists():
-        raise RuntimeError(f"CSV not found: {CSV_PATH}")
 
     items: list[dict] = []
-    with CSV_PATH.open("r", encoding="utf-8") as f:
-        r = csv.DictReader(f)
-        for row in r:
-            # IMPORTANT: images are keyed by article_id in dataset
-            article_id = pick(row, ["article_id", "id", "product_id"])
-            if not article_id:
+
+    with SessionLocal() as db:
+        stmt = select(Product)
+        for p in db.execute(stmt).scalars().yield_per(2000):
+            pid = str(p.id).strip()
+            if not pid:
                 continue
 
-            name = pick(row, ['prod_name'], default="Untitled")
-            price_cents_str = pick(row, ["price_cents"], default="0")
-            group_name = pick(row, ["product_group_name"], default="")
-            index_group_name = pick(row, ["index_group_name"], default="")
+            # Prefer the "convenience" name, fall back to raw CSV name
+            name = (p.name or p.prod_name or "Untitled").strip()
 
+            # Price: prefer float `price`, else derive from `price_cents`
+            price = p.price
+            if price is None and p.price_cents is not None:
+                price = float(p.price_cents) / 100.0
+            price = float(price or 0.0)
+
+            # Use canonical CSV columns for filtering (what your endpoints use)
+            product_group_name = (p.product_group_name or p.category or "").strip()
+            index_group_name = (p.index_group_name or "").strip()
+            colour_group_name = (p.colour_group_name or p.color or "").strip()
+
+            description = (p.description or p.detail_desc or "").strip()
+
+            # Mode derived from index_group_name (same logic you had)
+            mode = None
             if index_group_name == "Menswear":
                 mode = "men"
             elif index_group_name in ("Ladieswear", "Divided"):
                 mode = "women"
 
-            price = to_price(price_cents_str)
+            # Image: prefer stored image_key; else compute from id (article_id)
+            image_key = (p.image_key or "").strip()
+            if not image_key:
+                image_key = build_image_key(pid)
 
-            desc = pick(row, ["detail_desc"], default="")
+            # Return a usable URL (AWS in prod; local /images in dev)
+            if IMAGE_BASE_URL:
+                image_url = f"{IMAGE_BASE_URL}/{image_key.lstrip('/')}"
+            else:
+                # local fallback
+                aid = pid.zfill(10)
+                image_url = f"/images/{aid[:3]}/{aid}.jpg"
 
-            color_name = pick(row, ["colour_group_name"], default="")
+            items.append(
+                {
+                    "id": pid,
+                    "name": name,
+                    "price": price,
+                    "image_url": image_url,
 
+                    # fields your endpoints/search expect:
+                    "product_group_name": product_group_name,
+                    "index_group_name": index_group_name,
+                    "colour_group_name": colour_group_name,
+                    "color_name": colour_group_name,
 
+                    "description": description,
+                    "mode": mode,
 
-            item = {
-                "id": str(article_id),
-                "name": name,
-                "price": price,
-                "image_url": build_image_key(article_id),
-                "product_group_name": group_name,
-                "description": desc,
-                "color_name": color_name,
-                "colour_group_name": color_name,
-                "index_group_name": index_group_name,
-                "mode": mode,
-            }
-            items.append(item)
+                    # optional extras (handy later)
+                    "perceived_colour_master_name": (p.perceived_colour_master_name or "").strip(),
+                    "product_type_name": (p.product_type_name or "").strip(),
+                    "has_image": bool(p.has_image),
+                }
+            )
 
     PRODUCTS = items
     INDEX = {p["id"]: p for p in PRODUCTS}
-
-load_products()
 
 #recommend similar products using color
 def norm(s: str) -> str:
@@ -173,12 +213,26 @@ def build_indices():
         if g and c:
             GROUP_COLOR_INDEX.setdefault((g, c), []).append(p)
 
-build_indices()
+
+LOAD_ERR: str | None = None
+
+@app.on_event("startup")
+def _startup():
+    global LOAD_ERR
+    try:
+        load_products()
+        build_indices()
+    except Exception as e:
+        LOAD_ERR = str(e)
+        PRODUCTS.clear()
+        INDEX.clear()
+        build_indices()
+
 
 
 @app.get("/health")
 def health():
-    return {"ok": True, "products": len(PRODUCTS)}
+    return {"ok": True, "products": len(PRODUCTS), "load_err": LOAD_ERR}
 
 # NOTE: These are currently NON-versioned (/products).
 @app.get("/products")
@@ -200,11 +254,11 @@ def list_products(
         ]
 
     if product_group_name:
-            allowed_groups = {s.strip().lower() for s in product_group_name}
-            items = [
-                p for p in items
-                if str(p.get("product_group_name", "")).strip().lower() in allowed_groups
-            ]
+        allowed_groups = {s.strip().lower() for s in product_group_name}
+        items = [
+            p for p in items
+            if str(p.get("product_group_name", "")).strip().lower() in allowed_groups
+        ]
 
     if q:
         qq = q.lower().strip()
