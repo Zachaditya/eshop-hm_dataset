@@ -97,7 +97,7 @@ def main():
     print(f"Loaded {len(texts)} products from {CSV_PATH}")
 
     # Embed
-    model = SentenceTransformer(MODEL_NAME)
+    model = SentenceTransformer(MODEL_NAME, backend = "onnx")
     emb = model.encode(
         texts,
         batch_size=BATCH_SIZE,

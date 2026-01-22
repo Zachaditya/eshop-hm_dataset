@@ -1,16 +1,18 @@
---index-url https://download.pytorch.org/whl/cpu
-torch==2.10.0
---index-url https://pypi.org/simple
-
 fastapi
 uvicorn[standard]
+python-dotenv>=1.0
 SQLAlchemy
 alembic
 psycopg[binary]>=3.1
 numpy>=1.26,<3
 pydantic-settings>=2.0
-python-dotenv>=1.0
 email-validator>=2.0
 
+rapidfuzz
 faiss-cpu==1.13.2
-sentence-transformers[onnx]
+
+
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.10.0+cpu
+
+sentence-transformers[onnx]==5.2.0
