@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 
 const META_MARKER = "\n\n<<HM_SHOP_PRODUCTS>>";
 //Only True Locally
-const CHATBOT_ENABLED = process.env.NEXT_PUBLIC_CHATBOT_ENABLED === "true";
+const CHATBOT_ENABLED = process.env.NEXT_PUBLIC_CHATBOT_ENABLED === "false";
 
 
 
