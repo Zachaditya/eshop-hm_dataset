@@ -322,8 +322,12 @@ def semantic_products(
     index_group_name: list[str] = Query(default=[]),
     product_group_name: list[str] = Query(default=[]),
 ):
-    if not SEMANTIC_ENABLED:
-        raise HTTPException(status_code=503, detail=f"Semantic search disabled: {SEMANTIC_ERR}")
+    
+    try:
+        hits = semantic_search_ids(q, top_k=300)
+        intent = parse_query_intent(q)
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Semantic search unavailable: {e}")
     # 1) vector retrieval
     hits = semantic_search_ids(q, top_k=300)
 
@@ -370,6 +374,24 @@ def semantic_products(
         "offset": offset,
         "intent": intent,  # keep during dev; remove later if you want
     }
+
+@app.get("/meta/semantic")
+def semantic_meta():
+    try:
+        from app.search import _paths
+        index_path, idmap_path, vocab_path = _paths()
+        return {
+            "enabled": SEMANTIC_ENABLED,
+            "import_err": SEMANTIC_ERR,
+            "index_exists": index_path.exists(),
+            "idmap_exists": idmap_path.exists(),
+            "vocab_exists": vocab_path.exists(),
+            "index_path": str(index_path),
+            "idmap_path": str(idmap_path),
+            "vocab_path": str(vocab_path),
+        }
+    except Exception as e:
+        return {"enabled": SEMANTIC_ENABLED, "import_err": SEMANTIC_ERR, "meta_err": str(e)}
 
 
 @app.get("/products/{product_id}")

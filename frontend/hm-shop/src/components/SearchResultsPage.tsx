@@ -10,7 +10,7 @@ type Product = {
   id: string | number;
   name: string;
   price: number;
-  image_url: string;
+  image_url: string; // may be full https URL (AWS) or local /images/...
 };
 
 function formatUSD(n: number) {
@@ -83,6 +83,14 @@ export default function SearchResultsPage() {
   const loadingRef = useRef(false);
   const hasMoreRef = useRef(true);
 
+  function resolveImgSrc(imageUrl: string): string {
+    const u = (imageUrl ?? "").trim();
+    if (!u) return "";
+    if (u.startsWith("http://") || u.startsWith("https://")) return u;
+    // local fallback
+    return `${API_BASE}${u.startsWith("/") ? "" : "/"}${u}`;
+  }
+
   async function fetchSemanticProducts(opts: {
     q: string;
     mode: Mode;
@@ -95,10 +103,7 @@ export default function SearchResultsPage() {
     params.set("limit", String(opts.limit));
     params.set("offset", String(opts.offset));
 
-    // group filters (repeatable)
-    for (const g of opts.groups) {
-      params.append("product_group_name", g);
-    }
+    for (const g of opts.groups) params.append("product_group_name", g);
 
     // mode -> index groups (repeatable) to match your backend
     if (opts.mode === "men") {
@@ -108,13 +113,46 @@ export default function SearchResultsPage() {
       params.append("index_group_name", "Divided");
     }
 
-    // IMPORTANT: this endpoint must exist on your backend
     const url = `${API_BASE}/products/semantic?${params.toString()}`;
     const resp = await fetch(url, { cache: "no-store" });
 
     if (!resp.ok) {
       const body = await resp.text().catch(() => "");
-      throw new Error(`API error ${resp.status}: ${body}`);
+      throw new Error(`Semantic search failed (${resp.status}): ${body}`);
+    }
+
+    const data = await resp.json();
+    return { items: data.items ?? [], total: data.total ?? 0 };
+  }
+
+  async function fetchKeywordProducts(opts: {
+    q: string;
+    mode: Mode;
+    groups: string[];
+    limit: number;
+    offset: number;
+  }): Promise<{ items: Product[]; total: number }> {
+    const params = new URLSearchParams();
+    params.set("q", opts.q);
+    params.set("limit", String(opts.limit));
+    params.set("offset", String(opts.offset));
+
+    for (const g of opts.groups) params.append("product_group_name", g);
+
+    // mode -> index groups (repeatable) to match your backend
+    if (opts.mode === "men") {
+      params.append("index_group_name", "Menswear");
+    } else {
+      params.append("index_group_name", "Ladieswear");
+      params.append("index_group_name", "Divided");
+    }
+
+    const url = `${API_BASE}/products?${params.toString()}`;
+    const resp = await fetch(url, { cache: "no-store" });
+
+    if (!resp.ok) {
+      const body = await resp.text().catch(() => "");
+      throw new Error(`Search failed (${resp.status}): ${body}`);
     }
 
     const data = await resp.json();
@@ -122,7 +160,7 @@ export default function SearchResultsPage() {
   }
 
   const loadMore = useCallback(async () => {
-    if (!q) return; // nothing to search
+    if (!q) return;
     if (loadingRef.current || !hasMoreRef.current) return;
 
     loadingRef.current = true;
@@ -132,13 +170,25 @@ export default function SearchResultsPage() {
     try {
       const currOffset = offsetRef.current;
 
-      const res = await fetchSemanticProducts({
-        q,
-        mode,
-        groups: effectiveGroups,
-        limit: PAGE_SIZE,
-        offset: currOffset,
-      });
+      // Try semantic first, fall back to keyword search if semantic is down
+      let res: { items: Product[]; total: number };
+      try {
+        res = await fetchSemanticProducts({
+          q,
+          mode,
+          groups: effectiveGroups,
+          limit: PAGE_SIZE,
+          offset: currOffset,
+        });
+      } catch (e) {
+        res = await fetchKeywordProducts({
+          q,
+          mode,
+          groups: effectiveGroups,
+          limit: PAGE_SIZE,
+          offset: currOffset,
+        });
+      }
 
       setTotal(res.total);
 
@@ -212,7 +262,7 @@ export default function SearchResultsPage() {
           <h2>
             “{q}”{category ? ` • Category: ${category}` : ""}
           </h2>
-          <h3> {group && group !== "all" ? `   in: ${group}` : ""}</h3>
+          <h3>{group && group !== "all" ? `in: ${group}` : ""}</h3>
         </div>
 
         <div className="text-sm text-neutral-600">
@@ -228,28 +278,31 @@ export default function SearchResultsPage() {
       ) : null}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {items.map((p) => (
-          <Link
-            key={String(p.id)}
-            href={`/products/${p.id}`}
-            className="group rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
-          >
-            <img
-              src={`${API_BASE}${p.image_url}`}
-              alt={p.name}
-              className="aspect-[4/5] w-full rounded-xl bg-neutral-100 object-cover"
-              loading="lazy"
-            />
-            <div className="mt-4">
-              <div className="truncate text-sm font-medium text-neutral-900">
-                {p.name}
+        {items.map((p) => {
+          const imgSrc = resolveImgSrc(p.image_url);
+          return (
+            <Link
+              key={String(p.id)}
+              href={`/products/${p.id}`}
+              className="group rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+            >
+              <img
+                src={imgSrc}
+                alt={p.name}
+                className="aspect-[4/5] w-full rounded-xl bg-neutral-100 object-cover"
+                loading="lazy"
+              />
+              <div className="mt-4">
+                <div className="truncate text-sm font-medium text-neutral-900">
+                  {p.name}
+                </div>
+                <div className="mt-1 text-sm text-neutral-600">
+                  {formatUSD(p.price)}
+                </div>
               </div>
-              <div className="mt-1 text-sm text-neutral-600">
-                {formatUSD(p.price)}
-              </div>
-            </div>
-          </Link>
-        ))}
+            </Link>
+          );
+        })}
       </div>
 
       <div ref={sentinelRef} className="h-12" />
