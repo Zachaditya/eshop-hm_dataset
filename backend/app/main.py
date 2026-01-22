@@ -57,9 +57,10 @@ IMAGE_BASE_URL = (os.getenv("IMAGE_BASE_URL") or "").rstrip("/")
 
 IMG_ROOT = PROJECT_ROOT / "data" / "images"
 
+if not IMAGE_BASE_URL:
+    IMG_ROOT.mkdir(parents=True, exist_ok=True)
+    app.mount("/images", StaticFiles(directory=str(IMG_ROOT)), name="images")
 
-# Serve images at /images/...
-app.mount("/images", StaticFiles(directory=str(IMG_ROOT)), name="images")
 
 app.include_router(products_router, prefix="/v1")
 app.include_router(events_router, prefix="/v1")

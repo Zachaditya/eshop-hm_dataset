@@ -11,6 +11,8 @@ class Settings(BaseSettings):
     )
 
     database_url: str = Field(..., alias="DATABASE_URL")
+    image_base_url: str | None = Field(default=None, alias="IMAGE_BASE_URL")
+
 
     @field_validator("database_url", mode="before")
     @classmethod
