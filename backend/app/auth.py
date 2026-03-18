@@ -3,25 +3,25 @@ from fastapi import APIRouter, HTTPException, Response, Request, Depends
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session as DbSession
 from datetime import datetime, timedelta, timezone
-import secrets, hashlib
+import secrets
 
 from app.core.db import get_db
 from app.db.models import User, UserSession
+from app.core.auth_utils import token_hash, get_optional_user, SESSION_COOKIE
 
-from app.services.cart_service import attach_guest_cart_to_user 
+from app.services.cart_service import attach_guest_cart_to_user
 
-CART_COOKIE = "cart_id" 
+CART_COOKIE = "cart_id"
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-SESSION_COOKIE = "sid"
 SESSION_TTL_DAYS = 30
 
 def _new_token() -> str:
     return secrets.token_urlsafe(32)
 
-def _token_hash(token: str) -> str:
-    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+# Re-export for any callers that import _token_hash from here directly
+_token_hash = token_hash
 
 def _expires_at() -> datetime:
     return datetime.now(timezone.utc) + timedelta(days=SESSION_TTL_DAYS)
@@ -45,27 +45,7 @@ def _placeholder_password_hash() -> str:
     return secrets.token_hex(32)
 
 def _get_user_from_request(req: Request, db: DbSession) -> User | None:
-    token = req.cookies.get(SESSION_COOKIE)
-    if not token:
-        return None
-
-    th = _token_hash(token)
-    sess = db.query(UserSession).filter(UserSession.token_hash == th).first()
-    if not sess:
-        return None
-
-    now = datetime.now(timezone.utc)
-    exp = sess.expires_at
-    # SQLite may return naive datetimes; treat as UTC
-    if exp.tzinfo is None:
-        exp = exp.replace(tzinfo=timezone.utc)
-
-    if exp < now:
-        db.delete(sess)
-        db.commit()
-        return None
-
-    return db.query(User).filter(User.id == sess.user_id).first()
+    return get_optional_user(req, db, delete_expired=True)
 
 # ----- Schemas (passwordless) -----
 class RegisterIn(BaseModel):

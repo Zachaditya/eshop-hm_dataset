@@ -127,9 +127,10 @@ export default function Navbar() {
   // Search stays on the current page (preserves group, replaces q)
   const submitSearch = () => {
     const trimmed = q.trim();
-    const params = new URLSearchParams();
+    if (!trimmed) return;
 
-    if (trimmed) params.set("q", trimmed);
+    const params = new URLSearchParams();
+    params.set("q", trimmed);
     params.set("mode", mode);
 
     // carry context so search is “within” the current category/group

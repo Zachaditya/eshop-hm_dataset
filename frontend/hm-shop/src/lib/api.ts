@@ -29,6 +29,29 @@ function backendFetch<T>(path: string, init?: RequestInit) {
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
 
+/**
+ * Resolves a product image URL.
+ * Handles:
+ *   - Full https URLs (returned as-is)
+ *   - Storage keys like "images_data/011/0110065002.jpg" (rewritten to /images/...)
+ *   - Relative paths (prefixed with API_BASE)
+ *   - Empty/null (returns "/placeholder.png")
+ */
+export function resolveImageUrl(imageUrl: string | null | undefined): string {
+  const base = API_BASE.replace(/\/$/, "");
+  const raw = (imageUrl ?? "").trim();
+
+  if (!raw) return "/placeholder.png";
+  if (/^https?:\/\//i.test(raw)) return raw;
+
+  const path = raw.replace(/^\/+/, "");
+  const finalPath = path.startsWith("images_data/")
+    ? `images/${path.slice("images_data/".length)}`
+    : path;
+
+  return `${base}/${finalPath}`;
+}
+
 // General product fetching with filters, pagination, search, etc.
 export async function getProducts(params?: {
   limit?: number;
@@ -57,31 +80,22 @@ export async function getProducts(params?: {
 }
 
 export async function getProduct(id: string) {
-  const url = `${API_BASE}/products/${encodeURIComponent(id)}`;
-  const resp = await fetch(url, { cache: "no-store" });
-
-  if (!resp.ok) {
-    const body = await resp.text().catch(() => "");
-    throw new Error(`API error ${resp.status} ${resp.statusText} @ ${url}\n${body}`);
-  }
-
-  return (await resp.json()) as Product;
+  return backendFetch<Product>(`/products/${encodeURIComponent(id)}`);
 }
 
-// Below is to fetch products for the homepage 
+// Below is to fetch products for the homepage
 export async function getHomepageProducts(opts: {
   limit?: number;
   group?: string;
   mode?: "men" | "women";
   seed?: number;
 }) {
-
-  const url = new URL(backendUrl("/products/homepage"));
-  url.searchParams.set("limit", String(opts.limit ?? 12));
-  url.searchParams.set("group", opts.group ?? "Garment Upper body");
-  if (opts.mode) url.searchParams.set("mode", opts.mode);
-  if (opts.seed !== undefined) url.searchParams.set("seed", String(opts.seed));
-  return apiFetch<{ items: any[] }>(url.toString());
+  const qs = new URLSearchParams();
+  qs.set("limit", String(opts.limit ?? 12));
+  qs.set("group", opts.group ?? "Garment Upper body");
+  if (opts.mode) qs.set("mode", opts.mode);
+  if (opts.seed !== undefined) qs.set("seed", String(opts.seed));
+  return backendFetch<{ items: Product[] }>(`/products/homepage?${qs.toString()}`);
 }
 
 

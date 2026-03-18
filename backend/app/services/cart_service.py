@@ -90,7 +90,7 @@ def add_item(
         item.quantity += quantity
         if snapshot_unit_price and item.unit_price_cents is None and unit_price_cents is not None:
             item.unit_price_cents = unit_price_cents
-        item.updated_at = datetime.utctnow()
+        item.updated_at = datetime.utcnow()
         db.commit()
 
     cart = get_cart_with_items(db, cart_id)

@@ -5,6 +5,8 @@ export type Product = {
   image_url?: string | null;
   image_key?: string | null;
   product_group_name?: string;
+  index_group_name?: string;
+  colour_group_name?: string;
   description?: string;
 };
   

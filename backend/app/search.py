@@ -6,8 +6,12 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import faiss
-from typing import Any
 from rapidfuzz import process, fuzz
+
+try:
+    from sentence_transformers import SentenceTransformer
+except ModuleNotFoundError as e:
+    raise RuntimeError("Semantic search disabled: sentence-transformers not installed") from e
 
 # Lazy-loaded globals
 _INDEX: faiss.Index | None = None
@@ -15,19 +19,6 @@ _IDMAP: list[str] | None = None
 _VOCAB: dict[str, list[str]] | None = None
 
 _MODEL: Any = None  # or TextEmbedding later
-
-def load_search_assets(model_name: str = "sentence-transformers/all-MiniLM-L6-v2") -> None:
-    global _MODEL, _INDEX, _IDMAP, _VOCAB
-    if _MODEL is not None and _INDEX is not None and _IDMAP is not None:
-        return
-
-    try:
-        from sentence_transformers import SentenceTransformer
-    except ModuleNotFoundError as e:
-        raise RuntimeError("Semantic search disabled: sentence-transformers not installed") from e
-
-    ...
-    _MODEL = SentenceTransformer(model_name, backend="onnx")
 
 def _paths() -> tuple[Path, Path, Path]:
     here = Path(__file__).resolve()

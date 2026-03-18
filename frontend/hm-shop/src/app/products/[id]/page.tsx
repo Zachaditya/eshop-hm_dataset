@@ -1,7 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getProduct, getSimilarProducts } from "../../../lib/api";
+import { getProduct, getSimilarProducts, resolveImageUrl } from "../../../lib/api";
 
 import { AddtoCart } from "@/components/AddtoCart";
 
@@ -33,14 +33,7 @@ export default async function ProductDetailPage({
   }
   const { items: similar } = await getSimilarProducts(id, { limit: 8 });
 
-  const rel =
-    typeof product.image_url === "string"
-      ? product.image_url.replace(/^\/?images_data\//, "") // remove images_data/
-      : "";
-
-  const imgSrc = rel
-    ? new URL(`/images/${rel}`, API_BASE).toString()
-    : "/placeholder.png";
+  const imgSrc = resolveImageUrl(product.image_url);
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-10">

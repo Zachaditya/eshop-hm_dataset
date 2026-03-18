@@ -16,6 +16,12 @@ const nextConfig: NextConfig = {
         hostname: "eshop-hmdataset-production.up.railway.app",
         pathname: "/images/**",
       },
+      // product images from S3
+      {
+        protocol: "https",
+        hostname: "zachadityaecom.s3.us-east-2.amazonaws.com",
+        pathname: "/images/**",
+      },
     ],
   },
 

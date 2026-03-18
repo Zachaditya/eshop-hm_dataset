@@ -3,15 +3,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { resolveImageUrl } from "@/lib/api";
+import type { Product } from "@/lib/types";
 
 type Mode = "men" | "women";
-
-type Product = {
-  id: string | number;
-  name: string;
-  price: number;
-  image_url: string; // may be full https URL (AWS) or local /images/...
-};
 
 function formatUSD(n: number) {
   return new Intl.NumberFormat("en-US", {
@@ -40,12 +35,9 @@ const CATEGORY_GROUPS: Record<string, string[]> = {
   other: [],
 };
 
-export default function SearchResultsPage() {
-  const API_BASE = useMemo(
-    () => process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000",
-    []
-  );
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
 
+export default function SearchResultsPage() {
   const sp = useSearchParams();
 
   const q = (sp.get("q") ?? "").trim();
@@ -83,21 +75,10 @@ export default function SearchResultsPage() {
   const loadingRef = useRef(false);
   const hasMoreRef = useRef(true);
 
-  function resolveImgSrc(imageUrl: string): string {
-    const u = (imageUrl ?? "").trim();
-    if (!u) return "";
-    if (u.startsWith("http://") || u.startsWith("https://")) return u;
-    // local fallback
-    return `${API_BASE}${u.startsWith("/") ? "" : "/"}${u}`;
-  }
-
-  async function fetchSemanticProducts(opts: {
-    q: string;
-    mode: Mode;
-    groups: string[];
-    limit: number;
-    offset: number;
-  }): Promise<{ items: Product[]; total: number }> {
+  async function fetchProducts(
+    endpoint: "semantic" | "keyword",
+    opts: { q: string; mode: Mode; groups: string[]; limit: number; offset: number }
+  ): Promise<{ items: Product[]; total: number }> {
     const params = new URLSearchParams();
     params.set("q", opts.q);
     params.set("limit", String(opts.limit));
@@ -105,7 +86,6 @@ export default function SearchResultsPage() {
 
     for (const g of opts.groups) params.append("product_group_name", g);
 
-    // mode -> index groups (repeatable) to match your backend
     if (opts.mode === "men") {
       params.append("index_group_name", "Menswear");
     } else {
@@ -113,41 +93,8 @@ export default function SearchResultsPage() {
       params.append("index_group_name", "Divided");
     }
 
-    const url = `${API_BASE}/products/semantic?${params.toString()}`;
-    const resp = await fetch(url, { cache: "no-store" });
-
-    if (!resp.ok) {
-      const body = await resp.text().catch(() => "");
-      throw new Error(`Semantic search failed (${resp.status}): ${body}`);
-    }
-
-    const data = await resp.json();
-    return { items: data.items ?? [], total: data.total ?? 0 };
-  }
-
-  async function fetchKeywordProducts(opts: {
-    q: string;
-    mode: Mode;
-    groups: string[];
-    limit: number;
-    offset: number;
-  }): Promise<{ items: Product[]; total: number }> {
-    const params = new URLSearchParams();
-    params.set("q", opts.q);
-    params.set("limit", String(opts.limit));
-    params.set("offset", String(opts.offset));
-
-    for (const g of opts.groups) params.append("product_group_name", g);
-
-    // mode -> index groups (repeatable) to match your backend
-    if (opts.mode === "men") {
-      params.append("index_group_name", "Menswear");
-    } else {
-      params.append("index_group_name", "Ladieswear");
-      params.append("index_group_name", "Divided");
-    }
-
-    const url = `${API_BASE}/products?${params.toString()}`;
+    const path = endpoint === "semantic" ? "products/semantic" : "products";
+    const url = `${API_BASE}/${path}?${params.toString()}`;
     const resp = await fetch(url, { cache: "no-store" });
 
     if (!resp.ok) {
@@ -171,23 +118,12 @@ export default function SearchResultsPage() {
       const currOffset = offsetRef.current;
 
       // Try semantic first, fall back to keyword search if semantic is down
+      const fetchOpts = { q, mode, groups: effectiveGroups, limit: PAGE_SIZE, offset: currOffset };
       let res: { items: Product[]; total: number };
       try {
-        res = await fetchSemanticProducts({
-          q,
-          mode,
-          groups: effectiveGroups,
-          limit: PAGE_SIZE,
-          offset: currOffset,
-        });
-      } catch (e) {
-        res = await fetchKeywordProducts({
-          q,
-          mode,
-          groups: effectiveGroups,
-          limit: PAGE_SIZE,
-          offset: currOffset,
-        });
+        res = await fetchProducts("semantic", fetchOpts);
+      } catch {
+        res = await fetchProducts("keyword", fetchOpts);
       }
 
       setTotal(res.total);
@@ -219,7 +155,7 @@ export default function SearchResultsPage() {
       loadingRef.current = false;
       setLoading(false);
     }
-  }, [API_BASE, q, mode, groupsKey, effectiveGroups]);
+  }, [q, mode, groupsKey, effectiveGroups]);
 
   // Reset whenever q/mode/groups changes
   useEffect(() => {
@@ -279,7 +215,7 @@ export default function SearchResultsPage() {
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {items.map((p) => {
-          const imgSrc = resolveImgSrc(p.image_url);
+          const imgSrc = resolveImageUrl(p.image_url);
           return (
             <Link
               key={String(p.id)}

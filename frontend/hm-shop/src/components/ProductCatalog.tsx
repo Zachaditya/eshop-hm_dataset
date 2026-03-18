@@ -2,17 +2,10 @@
 
 import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
+import { resolveImageUrl } from "@/lib/api";
+import type { Product } from "@/lib/types";
 
 export type Mode = "men" | "women";
-
-type ProductLike = {
-  id: string | number;
-  name: string;
-  price: number;
-  image_url: string;
-
-  index_group_name?: string; // "Menswear" | "Ladieswear" | "Divided" ...
-};
 
 function formatUSD(n: number) {
   return new Intl.NumberFormat("en-US", {
@@ -23,18 +16,18 @@ function formatUSD(n: number) {
 
 export default function ProductCatalog({
   items,
-  apiBase,
+  apiBase: _apiBase,
   title,
   seeAllHref = "/products",
   mode,
   limit,
 }: {
-  items: ProductLike[];
-  apiBase: string;
+  items: Product[];
+  apiBase?: string;
   title?: string;
   seeAllHref?: string;
-  mode?: Mode; // optional
-  limit?: number; // optional
+  mode?: Mode;
+  limit?: number;
 }) {
   const reduceMotion = useReducedMotion();
 
@@ -139,22 +132,7 @@ export default function ProductCatalog({
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src={(() => {
-                  const base = (apiBase ?? "").replace(/\/$/, "");
-                  const raw = (p.image_url ?? "").trim();
-
-                  if (!raw) return "/placeholder.png";
-
-                  if (/^https?:\/\//i.test(raw)) return raw;
-
-                  const path = raw.replace(/^\/+/, "");
-
-                  const finalPath = path.startsWith("images_data/")
-                    ? `images/${path.slice("images_data/".length)}`
-                    : path;
-
-                  return `${base}/${finalPath}`;
-                })()}
+                src={resolveImageUrl(p.image_url)}
                 alt={p.name}
                 className="aspect-[4/5] w-full rounded-xl bg-neutral-100 object-cover"
                 loading="lazy"
@@ -162,7 +140,7 @@ export default function ProductCatalog({
                   const img = e.currentTarget as HTMLImageElement;
                   if (img.dataset.fallback !== "1") {
                     img.dataset.fallback = "1";
-                    img.src = "/placeholder.png"; // put placeholder.png in /public
+                    img.src = "/placeholder.png";
                   }
                 }}
               />

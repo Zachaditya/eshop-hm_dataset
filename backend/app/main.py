@@ -2,7 +2,6 @@ from fastapi import FastAPI, HTTPException, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from app.api.v1.products import router as products_router
 from app.api.v1.events import router as events_router
 
 from pathlib import Path
@@ -16,6 +15,7 @@ from collections import Counter
 from app.db.models import Product
 from sqlalchemy import select
 from app.core.db import SessionLocal
+from app.core.config import settings
 
 
 SEMANTIC_ENABLED = False
@@ -59,7 +59,7 @@ HERE = Path(__file__).resolve().parent
 
 PROJECT_ROOT = HERE if (HERE / "data").exists() else HERE.parent
 
-IMAGE_BASE_URL = (os.getenv("IMAGE_BASE_URL") or "").rstrip("/")
+IMAGE_BASE_URL = (settings.image_base_url or os.getenv("IMAGE_BASE_URL") or "").rstrip("/")
 
 IMG_ROOT = PROJECT_ROOT / "data" / "images"
 
@@ -68,7 +68,6 @@ if not IMAGE_BASE_URL:
     app.mount("/images", StaticFiles(directory=str(IMG_ROOT)), name="images")
 
 
-app.include_router(products_router, prefix="/v1")
 app.include_router(events_router, prefix="/v1")
 
 app.include_router(orders_router)
@@ -81,8 +80,8 @@ INDEX: dict[str, dict] = {}
 
 def build_image_key(article_id: str) -> str:
     aid = str(article_id).strip().zfill(10)
-    # Matches your R2 layout: images_data/011/0110065002.jpg
-    return f"images_data/{aid[:3]}/{aid}.jpg"
+    # S3 layout: images/011/0110065002.jpg
+    return f"images/{aid[:3]}/{aid}.jpg"
 
 def build_image_url(article_id: str) -> str:
     key = build_image_key(article_id)
@@ -114,6 +113,9 @@ def _maybe_full_image_url(image_val: str, product_id: str) -> str:
 
     # If DB stored a key, attach IMAGE_BASE_URL.
     if v:
+        # Normalize old R2 keys (images_data/...) to S3 layout (images/...)
+        if v.startswith("images_data/"):
+            v = "images/" + v[len("images_data/"):]
         return f"{IMAGE_BASE_URL}/{v.lstrip('/')}" if IMAGE_BASE_URL else v
 
     # If DB has nothing, compute from article_id/id
@@ -154,18 +156,8 @@ def load_products():
             elif index_group_name in ("Ladieswear", "Divided"):
                 mode = "women"
 
-            # Image: prefer stored image_key; else compute from id (article_id)
-            image_key = (p.image_key or "").strip()
-            if not image_key:
-                image_key = build_image_key(pid)
-
-            # Return a usable URL (AWS in prod; local /images in dev)
-            if IMAGE_BASE_URL:
-                image_url = f"{IMAGE_BASE_URL}/{image_key.lstrip('/')}"
-            else:
-                # local fallback
-                aid = pid.zfill(10)
-                image_url = f"/images/{aid[:3]}/{aid}.jpg"
+            # Image: use canonical helper (handles full URL, key, or empty)
+            image_url = _maybe_full_image_url((p.image_key or "").strip(), pid)
 
             items.append(
                 {
@@ -328,8 +320,6 @@ def semantic_products(
         intent = parse_query_intent(q)
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"Semantic search unavailable: {e}")
-    # 1) vector retrieval
-    hits = semantic_search_ids(q, top_k=300)
 
     # 2) hydrate
     items = []
@@ -357,7 +347,6 @@ def semantic_products(
         ]
 
     # 4) fuzzy intent boosts + rerank
-    intent = parse_query_intent(q)
     items = apply_fuzzy_boosts(items, intent)
 
     total = len(items)

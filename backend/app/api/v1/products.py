@@ -1,14 +1,6 @@
-from fastapi import APIRouter
-
-router = APIRouter()
-
-@router.get("/products")
-def list_products(query: str | None = None, page: int = 1, limit: int = 24):
-    # Placeholder until DB is wired
-    return {
-        "items": [],
-        "page": page,
-        "limit": limit,
-        "query": query,
-        "total": 0,
-    }
+# This stub router was removed. Product endpoints are served by main.py:
+#   GET /products          - list with filtering/pagination
+#   GET /products/semantic - semantic search
+#   GET /products/{id}     - single product
+#   GET /products/{id}/similar - similar products
+#   GET /products/homepage - randomized homepage products
