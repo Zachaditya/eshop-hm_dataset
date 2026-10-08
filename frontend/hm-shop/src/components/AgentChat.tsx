@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { MessageCircle } from "lucide-react";
+import { MessageCircle, Maximize2, Minimize2 } from "lucide-react";
+import { resolveImageUrl, API_BASE } from "@/lib/api";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 
 const META_MARKER = "\n\n<<HM_SHOP_PRODUCTS>>";
@@ -95,6 +96,7 @@ export default function AgentChat() {
   const CHATBOT_ENABLED = process.env.NEXT_PUBLIC_CHATBOT_ENABLED === "true";
 
   const [open, setOpen] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
   const [messages, setMessages] = useState<Msg[]>([
     {
       role: "assistant",
@@ -108,10 +110,6 @@ export default function AgentChat() {
   const listRef = useRef<HTMLDivElement | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  const API_BASE = useMemo(
-    () => process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000",
-    []
-  );
   const sp = useSearchParams();
   const reduceMotion = useReducedMotion();
 
@@ -157,11 +155,12 @@ export default function AgentChat() {
         messages: [...history, { role: "user", content: text }],
       };
 
-      const resp = await fetch("/api/agent", {
+      const resp = await fetch(`${API_BASE}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
         signal: controller.signal,
+        credentials: "include",
       });
 
       if (!resp.ok || !resp.body) {
@@ -214,6 +213,7 @@ export default function AgentChat() {
     abortRef.current?.abort();
     abortRef.current = null;
     setBusy(false);
+    setFullscreen(false);
     setOpen(false);
   }
 
@@ -258,7 +258,12 @@ export default function AgentChat() {
             />
 
             <motion.div
-              className="absolute bottom-5 right-5 w-[360px] overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-2xl"
+              className={cx(
+                "overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-2xl flex flex-col",
+                fullscreen
+                  ? "fixed inset-4 z-[60] md:inset-8 md:max-w-2xl md:mx-auto"
+                  : "absolute bottom-5 right-5 w-[360px]"
+              )}
               initial={reduceMotion ? { x: 0 } : { x: "100%" }}
               animate={
                 reduceMotion
@@ -282,7 +287,7 @@ export default function AgentChat() {
                     }
               }
             >
-              <div className="flex items-center justify-between border-b border-neutral-200 px-4 py-3">
+              <div className="flex shrink-0 items-center justify-between border-b border-neutral-200 px-4 py-3">
                 <div className="text-sm font-semibold text-neutral-900">
                   HM Assistant
                 </div>
@@ -296,6 +301,18 @@ export default function AgentChat() {
                     </button>
                   ) : null}
                   <button
+                    onClick={() => setFullscreen((f) => !f)}
+                    className="rounded-lg border border-neutral-200 bg-white p-1.5 text-neutral-700 hover:bg-neutral-50"
+                    aria-label={fullscreen ? "Exit full screen" : "Full screen"}
+                    title={fullscreen ? "Exit full screen" : "Full screen"}
+                  >
+                    {fullscreen ? (
+                      <Minimize2 className="h-4 w-4" />
+                    ) : (
+                      <Maximize2 className="h-4 w-4" />
+                    )}
+                  </button>
+                  <button
                     onClick={close}
                     className="rounded-lg border border-neutral-200 bg-white px-2 py-1 text-xs text-neutral-700 hover:bg-neutral-50"
                   >
@@ -306,7 +323,10 @@ export default function AgentChat() {
 
               <div
                 ref={listRef}
-                className="max-h-[420px] space-y-3 overflow-auto bg-neutral-50 px-4 py-3"
+                className={cx(
+                  "space-y-3 overflow-auto bg-neutral-50 px-4 py-3",
+                  fullscreen ? "flex-1 min-h-0" : "max-h-[420px]"
+                )}
               >
                 {uiMessages.map((m, idx) => (
                   <div
@@ -338,7 +358,7 @@ export default function AgentChat() {
                           {p.image_url ? (
                             // eslint-disable-next-line @next/next/no-img-element
                             <img
-                              src={`${API_BASE}${p.image_url}`}
+                              src={resolveImageUrl(p.image_url)}
                               alt={p.name}
                               className="aspect-[4/5] w-full rounded-lg bg-neutral-100 object-cover"
                               loading="lazy"
@@ -361,7 +381,7 @@ export default function AgentChat() {
                 ) : null}
               </div>
 
-              <div className="border-t border-neutral-200 bg-white p-3">
+              <div className="shrink-0 border-t border-neutral-200 bg-white p-3">
                 <div className="flex gap-2">
                   <input
                     value={input}

@@ -1,3 +1,5 @@
+"""FastAPI application for the H&M catalog storefront backend."""
+
 from fastapi import FastAPI, HTTPException, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -35,6 +37,8 @@ from app.api.cart import router as cart_router
 from app.auth import router as auth_router
 
 from app.api.orders import router as orders_router
+from app.api.agent_checkout import router as agent_checkout_router
+from app.chat import router as chat_router
 import os
 
 app = FastAPI(title="HM Shop Backend", version="0.1.0")
@@ -72,6 +76,10 @@ app.include_router(events_router, prefix="/v1")
 
 app.include_router(orders_router)
 
+app.include_router(agent_checkout_router)
+
+app.include_router(chat_router)
+
 
 PRODUCTS: list[dict] = []
 INDEX: dict[str, dict] = {}
@@ -79,11 +87,30 @@ INDEX: dict[str, dict] = {}
 
 
 def build_image_key(article_id: str) -> str:
+    """
+    Build the canonical object-storage key for a product image.
+
+    Params:
+        article_id: H&M article identifier.
+
+    Returns:
+        Storage key using the images/{prefix}/{article_id}.jpg layout.
+    """
     aid = str(article_id).strip().zfill(10)
     # S3 layout: images/011/0110065002.jpg
     return f"images/{aid[:3]}/{aid}.jpg"
 
 def build_image_url(article_id: str) -> str:
+    """
+    Build a public or local URL for a product image.
+
+    Params:
+        article_id: H&M article identifier.
+
+    Returns:
+        Absolute image URL when IMAGE_BASE_URL is configured, otherwise a local
+        static image path.
+    """
     key = build_image_key(article_id)
     if IMAGE_BASE_URL:
         return f"{IMAGE_BASE_URL}/{key}"
@@ -92,6 +119,16 @@ def build_image_url(article_id: str) -> str:
     return f"/images/{aid[:3]}/{aid}.jpg"
 
 def _coalesce(*vals, default=""):
+    """
+    Return the first non-empty string representation from a set of values.
+
+    Params:
+        *vals: Candidate values to inspect in order.
+        default: Fallback string returned when every value is empty or None.
+
+    Returns:
+        First non-empty stripped string, or the supplied default.
+    """
     for v in vals:
         if v is None:
             continue
@@ -102,10 +139,15 @@ def _coalesce(*vals, default=""):
 
 def _maybe_full_image_url(image_val: str, product_id: str) -> str:
     """
-    DB stores:
-      - a full https URL (already good)
-      - a key like 'images_data/011/0110065002.jpg'
-      - empty/null -> compute from article_id
+    Resolve a database image value into a usable product image URL.
+
+    Params:
+        image_val: Stored image URL, storage key, or blank value from the DB.
+        product_id: Product ID used to compute the default image path.
+
+    Returns:
+        Full remote URL, configured storage URL, existing local key, or computed
+        fallback image path.
     """
     v = (image_val or "").strip()
     if v.startswith("http://") or v.startswith("https://"):
@@ -122,6 +164,15 @@ def _maybe_full_image_url(image_val: str, product_id: str) -> str:
     return build_image_url(product_id)
 
 def load_products():
+    """
+    Load product rows from the database into in-memory search indexes.
+
+    Params:
+        None.
+
+    Returns:
+        None. Updates the module-level PRODUCTS and INDEX caches.
+    """
     global PRODUCTS, INDEX
 
     items: list[dict] = []
@@ -187,12 +238,30 @@ def load_products():
 
 #recommend similar products using color
 def norm(s: str) -> str:
+    """
+    Normalize a string for catalog grouping indexes.
+
+    Params:
+        s: Raw string value.
+
+    Returns:
+        Lowercase stripped string.
+    """
     return (s or "").strip().lower()
 
 GROUP_INDEX: dict[str, list[dict]] = {}
 GROUP_COLOR_INDEX: dict[tuple[str, str], list[dict]] = {}
 
 def build_indices():
+    """
+    Build group and group-color recommendation indexes from PRODUCTS.
+
+    Params:
+        None.
+
+    Returns:
+        None. Updates GROUP_INDEX and GROUP_COLOR_INDEX in place.
+    """
     global GROUP_INDEX, GROUP_COLOR_INDEX
     GROUP_INDEX = {}
     GROUP_COLOR_INDEX = {}
@@ -210,6 +279,15 @@ LOAD_ERR: str | None = None
 
 @app.on_event("startup")
 def _startup():
+    """
+    Populate product caches when the FastAPI application starts.
+
+    Params:
+        None.
+
+    Returns:
+        None. Records a load error while keeping the app health endpoint alive.
+    """
     global LOAD_ERR
     try:
         load_products()
@@ -224,6 +302,15 @@ def _startup():
 
 @app.get("/health")
 def health():
+    """
+    Report backend health and product cache status.
+
+    Params:
+        None.
+
+    Returns:
+        JSON-ready status with product count and any startup load error.
+    """
     return {"ok": True, "products": len(PRODUCTS), "load_err": LOAD_ERR}
 
 # NOTE: These are currently NON-versioned (/products).
@@ -235,6 +322,19 @@ def list_products(
     index_group_name: list[str] = Query(default=[]),  
     product_group_name: list[str] = Query(default=[]),
 ):
+    """
+    List catalog products with optional search and category filters.
+
+    Params:
+        limit: Maximum number of products to return.
+        offset: Number of products to skip for pagination.
+        q: Optional case-insensitive product-name search text.
+        index_group_name: Optional H&M index groups such as Menswear.
+        product_group_name: Optional H&M product groups such as footwear.
+
+    Returns:
+        Paginated product payload with items, total, limit, and offset.
+    """
     items = PRODUCTS
 
     # Filter by index group(s) first (Menswear / Ladieswear / Divided)
@@ -271,6 +371,19 @@ def homepage_products(
     mode: str | None = None,   
     seed: int | None = None,
 ):
+    """
+    Return a randomized homepage product shelf.
+
+    Params:
+        response: FastAPI response used to disable caching.
+        limit: Maximum number of shelf items.
+        group: Product group to sample from.
+        mode: Optional men/women catalog mode filter.
+        seed: Optional deterministic random seed.
+
+    Returns:
+        Product shelf payload with sampled items and selection metadata.
+    """
     response.headers["Cache-Control"] = "no-store"
 
     target = group.strip().lower()
@@ -314,6 +427,19 @@ def semantic_products(
     index_group_name: list[str] = Query(default=[]),
     product_group_name: list[str] = Query(default=[]),
 ):
+    """
+    List products ranked by the optional semantic search index.
+
+    Params:
+        q: Natural-language search query.
+        limit: Maximum number of results to return.
+        offset: Number of results to skip for pagination.
+        index_group_name: Optional H&M index groups such as Menswear.
+        product_group_name: Optional H&M product groups such as footwear.
+
+    Returns:
+        Paginated semantic-search payload with matched products and parsed intent.
+    """
     
     try:
         hits = semantic_search_ids(q, top_k=300)
@@ -366,6 +492,15 @@ def semantic_products(
 
 @app.get("/meta/semantic")
 def semantic_meta():
+    """
+    Report semantic-search file availability and import status.
+
+    Params:
+        None.
+
+    Returns:
+        JSON-ready diagnostic payload for semantic search setup.
+    """
     try:
         from app.search import _paths
         index_path, idmap_path, vocab_path = _paths()
@@ -385,6 +520,15 @@ def semantic_meta():
 
 @app.get("/products/{product_id}")
 def get_product(product_id: str):
+    """
+    Fetch one product from the in-memory catalog index.
+
+    Params:
+        product_id: H&M article identifier.
+
+    Returns:
+        Product payload for the requested ID.
+    """
     p = INDEX.get(str(product_id))
     if not p:
         raise HTTPException(status_code=404, detail="Product not found")
@@ -396,6 +540,17 @@ def similar_products(
     limit: int = Query(8, ge=1, le=50),
     seed: int | None = None,
 ):
+    """
+    Recommend similar products by product group and color.
+
+    Params:
+        product_id: Base product identifier.
+        limit: Maximum number of similar products to return.
+        seed: Optional deterministic random seed.
+
+    Returns:
+        Similar-product payload with base metadata and selected items.
+    """
     base = INDEX.get(str(product_id))
     if not base:
         raise HTTPException(status_code=404, detail="Product not found")
@@ -441,6 +596,15 @@ def similar_products(
 
 @app.get("/meta/product-groups")
 def product_groups():
+    """
+    Count product groups by H&M index group.
+
+    Params:
+        None.
+
+    Returns:
+        Mapping of index group names to product-group count records.
+    """
     # counts by index_group_name (Menswear/Ladieswear/Divided)
     by_mode: dict[str, Counter] = {}
     for p in PRODUCTS:
@@ -452,4 +616,3 @@ def product_groups():
         m: [{"group": g, "count": c} for g, c in by_mode[m].most_common()]
         for m in by_mode
     }
-

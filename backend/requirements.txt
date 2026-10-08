@@ -1,5 +1,6 @@
 fastapi
 uvicorn[standard]
+openai>=1.0
 python-dotenv>=1.0
 SQLAlchemy
 alembic
@@ -7,6 +8,7 @@ psycopg[binary]>=3.1
 numpy>=1.26,<3
 pydantic-settings>=2.0
 email-validator>=2.0
+web3>=7.0
 
 rapidfuzz
 faiss-cpu==1.13.2

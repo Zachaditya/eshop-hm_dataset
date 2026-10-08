@@ -1,3 +1,5 @@
+"""SQLAlchemy ORM models for products, users, carts, orders, and agent payments."""
+
 from sqlalchemy import (
     String, Integer, Float, Boolean, DateTime, ForeignKey, Text,
     CheckConstraint, UniqueConstraint, Index, func
@@ -10,6 +12,8 @@ from uuid import uuid4
 
 
 class Product(Base):
+    """Catalog product loaded from the H&M dataset."""
+
     __tablename__ = "products"
 
     # Primary key = article_id
@@ -67,6 +71,8 @@ class Product(Base):
     currency: Mapped[str | None] = mapped_column(String, nullable=True)
 
 class Event(Base):
+    """Tracked user or session product event."""
+
     __tablename__ = "events"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -79,6 +85,8 @@ class Event(Base):
 
 
 class User(Base):
+    """Passwordless shopper account used for carts and order history."""
+
     __tablename__ = "users"
 
     id: Mapped[str] = mapped_column(
@@ -98,6 +106,8 @@ class User(Base):
 
 
 class UserSession(Base):
+    """Persistent login session keyed by a hashed browser cookie token."""
+
     __tablename__ = "user_sessions"
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: uuid4().hex)
@@ -117,6 +127,8 @@ class UserSession(Base):
 
 
 class Cart(Base):
+    """Shopping cart that becomes an order when its status is ordered."""
+
     __tablename__ = "carts"
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: uuid4().hex)
@@ -150,6 +162,8 @@ class Cart(Base):
 
 
 class CartItem(Base):
+    """Line item inside a cart with an optional unit-price snapshot."""
+
     __tablename__ = "cart_items"
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: uuid4().hex)
@@ -172,3 +186,33 @@ class CartItem(Base):
         UniqueConstraint("cart_id", "product_id", name="ux_cart_items_cart_product"),
     )
 
+
+class PaymentIntent(Base):
+    """Merchant-side intent for a cart awaiting an exact USDC payment."""
+
+    __tablename__ = "payment_intents"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: uuid4().hex)
+    cart_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("carts.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    amount_cents: Mapped[int] = mapped_column(Integer, nullable=False)
+    pay_to: Mapped[str] = mapped_column(String, nullable=False)
+    status: Mapped[str] = mapped_column(String, nullable=False, server_default="requires_payment")
+    tx_hash: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+    paid_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    cart: Mapped["Cart"] = relationship("Cart")
+
+    __table_args__ = (
+        CheckConstraint("amount_cents >= 0", name="ck_payment_intents_amount_cents"),
+        CheckConstraint(
+            "status IN ('requires_payment','paid','canceled')",
+            name="ck_payment_intents_status",
+        ),
+        UniqueConstraint("tx_hash", name="ux_payment_intents_tx_hash"),
+    )

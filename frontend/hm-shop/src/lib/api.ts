@@ -27,7 +27,7 @@ function backendFetch<T>(path: string, init?: RequestInit) {
   return apiFetch<T>(backendUrl(path), init);
 }
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
+export const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
 
 /**
  * Resolves a product image URL.
