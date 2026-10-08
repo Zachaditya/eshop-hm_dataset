@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:session": "node --test tests/session-api.test.mjs"
   },
   "dependencies": {
     "framer-motion": "^12.26.2",
