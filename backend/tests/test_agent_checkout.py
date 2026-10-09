@@ -15,12 +15,16 @@ os.environ["AGENT_DEMO_USER_EMAIL"] = "agent-demo@example.com"
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 import pytest
+from sqlalchemy.dialects import postgresql
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.schema import CreateIndex
+from sqlalchemy.orm import Session
 
 from app.api.agent_checkout import router as agent_checkout_router
 from app.auth import router as auth_router
 from app.api.orders import router as orders_router
 from app.core.db import Base, SessionLocal, engine
-from app.db.models import Cart, PaymentIntent, Product
+from app.db.models import Cart, PaymentIntent, Product, User
 from app.services.onchain import (
     PaymentVerification,
     TRANSFER_TOPIC,
@@ -114,7 +118,7 @@ def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
             PaymentVerification generated from a matching or intentionally bad
             receipt fixture.
         """
-        if tx_hash == "0xgood":
+        if tx_hash in {"0xgood", "0xsecondgood"}:
             return receipt_has_exact_usdc_transfer(
                 _transfer_receipt(value=amount_cents_to_usdc_base_units(1100)),
                 usdc_contract_address=str(kwargs["usdc_contract_address"]),
@@ -356,6 +360,95 @@ def test_confirm_rejects_hash_replay_for_another_intent(client: TestClient) -> N
         second_intent = db.get(PaymentIntent, second["payment_intent_id"])
         assert second_intent is not None
         assert second_intent.status == "requires_payment"
+
+
+def test_active_cart_index_is_partial_on_postgresql() -> None:
+    """Restrict PostgreSQL's unique cart index to active carts only.
+
+    Params:
+        None.
+
+    Returns:
+        None. Compiled production DDL permits multiple historical orders per user.
+    """
+    index = next(index for index in Cart.__table__.indexes if index.name == "ux_carts_one_active_per_user")
+    ddl = str(CreateIndex(index).compile(dialect=postgresql.dialect()))
+
+    assert "WHERE" in ddl
+    assert "user_id IS NOT NULL" in ddl
+    assert "status = 'active'" in ddl
+
+
+def test_finalization_database_error_is_not_reported_as_hash_replay(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Distinguish an order database failure from genuine transaction replay.
+
+    Params:
+        client: Isolated agent checkout HTTP client.
+        monkeypatch: Fixture simulating a non-replay database constraint failure.
+
+    Returns:
+        None. The unpaid intent remains intact and the response identifies finalization.
+    """
+    order = _create_order(client)
+
+    def fail_commit(session: Session) -> None:
+        """Raise a controlled non-replay constraint failure during finalization.
+
+        Params:
+            session: SQLAlchemy session attempting to commit the verified order.
+
+        Returns:
+            None. Always raises the simulated integrity error.
+        """
+        raise IntegrityError("UPDATE carts", {}, RuntimeError("private-database-detail"))
+
+    monkeypatch.setattr(Session, "commit", fail_commit)
+    response = client.post(
+        f"/agent/payment-intents/{order['payment_intent_id']}/confirm",
+        headers=AGENT_HEADERS,
+        json={"tx_hash": "0xgood"},
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "ORDER_FINALIZATION_FAILED"
+    assert "private-database-detail" not in response.text
+    with SessionLocal() as db:
+        intent = db.get(PaymentIntent, order["payment_intent_id"])
+        assert intent.status == "requires_payment"
+        assert intent.tx_hash is None
+
+
+def test_demo_user_can_keep_active_cart_and_multiple_paid_orders(client: TestClient) -> None:
+    """Allow two paid agent orders while the demo user's normal cart remains active.
+
+    Params:
+        client: Isolated checkout HTTP client with a deterministic receipt verifier.
+
+    Returns:
+        None. One active cart and multiple paid orders coexist for the demo user.
+    """
+    with SessionLocal() as db:
+        user = User(email="agent-demo@example.com", password_hash="unused-test-hash")
+        db.add(user)
+        db.flush()
+        db.add(Cart(user_id=user.id, status="active"))
+        db.commit()
+
+    for tx_hash in ("0xgood", "0xsecondgood"):
+        order = _create_order(client)
+        response = client.post(
+            f"/agent/payment-intents/{order['payment_intent_id']}/confirm",
+            headers=AGENT_HEADERS,
+            json={"tx_hash": tx_hash},
+        )
+        assert response.status_code == 200
+
+    with SessionLocal() as db:
+        user = db.query(User).filter(User.email == "agent-demo@example.com").one()
+        assert db.query(Cart).filter(Cart.user_id == user.id, Cart.status == "active").count() == 1
+        assert db.query(Cart).filter(Cart.user_id == user.id, Cart.status == "ordered").count() == 2
 
 
 def test_receipt_verifier_requires_successful_exact_usdc_transfer() -> None:

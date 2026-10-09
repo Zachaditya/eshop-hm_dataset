@@ -155,6 +155,7 @@ class Cart(Base):
             "user_id",
             unique=True,
             sqlite_where=and_(user_id.isnot(None), status == "active"),
+            postgresql_where=and_(user_id.isnot(None), status == "active"),
         ),
 
         Index("ix_carts_user_id", "user_id"),

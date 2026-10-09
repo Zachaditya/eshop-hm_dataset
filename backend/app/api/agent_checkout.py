@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import secrets
 from datetime import datetime, timezone
 
@@ -18,6 +19,7 @@ from app.services.onchain import amount_cents_to_usdc_base_units, verify_usdc_tr
 
 
 router = APIRouter(prefix="/agent", tags=["agent-checkout"])
+logger = logging.getLogger(__name__)
 
 REQUIRES_PAYMENT = "requires_payment"
 PAID = "paid"
@@ -323,9 +325,24 @@ def confirm_payment_intent(
 
     try:
         db.commit()
-    except IntegrityError:
+    except IntegrityError as error:
         db.rollback()
-        raise _payment_not_verified("Transaction hash has already been used for another order.")
+        conflicting_intent = (
+            db.query(PaymentIntent)
+            .filter(PaymentIntent.tx_hash == tx_hash, PaymentIntent.id != payment_intent_id)
+            .one_or_none()
+        )
+        if conflicting_intent:
+            raise _payment_not_verified("Transaction hash has already been used for another order.")
+        constraint = getattr(getattr(error.orig, "diag", None), "constraint_name", None)
+        logger.error("Agent order finalization failed (constraint=%s)", constraint or "unknown")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": "ORDER_FINALIZATION_FAILED",
+                "message": "Payment verified, but the order could not be finalized. Retry confirmation only.",
+            },
+        ) from None
 
     db.refresh(intent)
     return _paid_order_response(intent)
